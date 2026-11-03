@@ -1,0 +1,15 @@
+#!/bin/sh
+# whiteboard: board on top, herdr below, in a private tmux server
+S=whiteboard
+DIR=$(dirname "$(realpath "$0")")
+
+tmux -L $S has-session -t $S 2>/dev/null && exec tmux -L $S attach -t $S
+
+mkdir -p "$PWD/.whiteboard"
+# ponytail: redraws every second with flicker; swap for a file-change watcher later
+tmux -L $S new-session -d -s $S -c "$PWD" \
+  "while true; do clear; python3 '$DIR/board.py' '$PWD/.whiteboard'; sleep 1; done"
+tmux -L $S split-window -v -l 65% -t $S -c "$PWD" herdr
+tmux -L $S set -t $S status off
+tmux -L $S set -t $S allow-passthrough on
+exec tmux -L $S attach -t $S
