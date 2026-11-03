@@ -11,5 +11,6 @@ tmux -L $S new-session -d -s $S -c "$PWD" \
 # WHITEBOARD_DIR tells agents in herdr where the board is (see hooks/session-start.sh)
 tmux -L $S split-window -v -l 65% -t $S -c "$PWD" -e "WHITEBOARD_DIR=$PWD/.whiteboard" herdr --session whiteboard
 tmux -L $S set -t $S status off
+tmux -L $S set -t $S mouse on  # drag the divider to resize
 tmux -L $S set -t $S allow-passthrough on
 exec tmux -L $S attach -t $S
