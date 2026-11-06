@@ -7,6 +7,7 @@ HERE = Path(__file__).parent
 ARGS = [a for a in sys.argv[1:] if a != "--watch"]
 BOARD = Path(ARGS[0]) if ARGS else HERE / ".whiteboard"
 GAP = "   │   "
+RESIZE_SETTLE = 0.2  # seconds without a resize signal before redrawing (tmux sends them ~250ms apart mid-drag)
 
 
 def render(item):
@@ -62,9 +63,8 @@ if __name__ == "__main__":
     while True:
         try:
             now = snapshot()
-            # A drag fires many resizes; redraw once they've stopped. tmux sends them
-            # ~250ms apart mid-drag, so the quiet window must be longer than that.
-            settled = resized_at and time.monotonic() - resized_at > 0.35
+            # A drag fires many resizes; redraw once they've stopped.
+            settled = resized_at and time.monotonic() - resized_at > RESIZE_SETTLE
             if now != last or settled:
                 draw()
                 last, resized_at = now, 0.0
