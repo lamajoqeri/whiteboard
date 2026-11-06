@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Render .whiteboard/ items side by side: text items as-is, .mmd via mermaid-ascii."""
-import subprocess, sys, time
+import signal, subprocess, sys, time
 from pathlib import Path
 
 HERE = Path(__file__).parent
@@ -37,21 +37,37 @@ def snapshot():
 
 
 def draw():
-    print("\033[H\033[2J" + side_by_side([render(p) for p in items()]), flush=True)
+    # Build the whole frame first, then overwrite in place (home, clear each line's tail,
+    # clear below) in one write: no blank-screen flash between frames.
+    frame = side_by_side([render(p) for p in items()])
+    sys.stdout.write("\033[H" + frame.replace("\n", "\033[K\n") + "\033[K\033[J")
+    sys.stdout.flush()
+
+
+resized_at = 0.0  # when the last resize signal arrived; 0 = none pending
+
+
+def on_resize(*_):
+    global resized_at
+    resized_at = time.monotonic()
 
 
 if __name__ == "__main__":
     if "--watch" not in sys.argv:
         draw()
         sys.exit()
-    # ponytail: polls mtimes once a second; use fswatch/kqueue if instant updates matter
+    signal.signal(signal.SIGWINCH, on_resize)  # terminal/pane resized, incl. divider drags
+    # ponytail: polls mtimes every 0.1s; use fswatch/kqueue if the board grows to many files
     last = None
     while True:
         try:
             now = snapshot()
-            if now != last:
+            # A drag fires many resizes; redraw once they've stopped. tmux sends them
+            # ~250ms apart mid-drag, so the quiet window must be longer than that.
+            settled = resized_at and time.monotonic() - resized_at > 0.35
+            if now != last or settled:
                 draw()
-                last = now
+                last, resized_at = now, 0.0
         except FileNotFoundError:  # file deleted mid-scan; next poll catches up
             pass
-        time.sleep(1)
+        time.sleep(0.1)
