@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Render .whiteboard/ items side by side: text items as-is, .mmd via mermaid-ascii."""
-import signal, subprocess, sys, time
+"""Render .whiteboard/ items in wrapping rows: text items as-is, .mmd via mermaid-ascii."""
+import shutil, signal, subprocess, sys, time
+from collections import namedtuple
 from pathlib import Path
 
 HERE = Path(__file__).parent
@@ -18,14 +19,42 @@ def render(item):
     return item.read_text().splitlines()
 
 
-def side_by_side(columns):
-    widths = [max((len(l) for l in c), default=0) for c in columns]
-    height = max((len(c) for c in columns), default=0)
+# ponytail: len() counts every char as 1 column; emoji/CJK are 2 and will overrun slightly
+Cell = namedtuple("Cell", "lines width height")
+
+
+def cell(lines):
+    return Cell(lines, max((len(l) for l in lines), default=0), len(lines))
+
+
+def join_row(cells):
+    """Join one row's cells left to right, each padded to its width."""
     rows = []
-    for i in range(height):
-        cells = [(c[i] if i < len(c) else "").ljust(w) for c, w in zip(columns, widths)]
-        rows.append(GAP.join(cells).rstrip())
-    return "\n".join(rows)
+    for i in range(max((c.height for c in cells), default=0)):
+        parts = [(c.lines[i] if i < c.height else "").ljust(c.width) for c in cells]
+        rows.append(GAP.join(parts).rstrip())
+    return rows
+
+
+def layout(cells, width, height):
+    """Place cells in order, wrapping to a new row when the next one won't fit; crop to width x height."""
+    rows, row, used = [], [], 0
+    for c in cells:
+        need = c.width + (len(GAP) if row else 0)
+        if row and used + need > width:  # doesn't fit: start a new row
+            rows.append(row)
+            row, used, need = [], 0, c.width
+        row.append(c)
+        used += need
+    if row:
+        rows.append(row)
+
+    lines = []
+    for r in rows:
+        if lines:
+            lines.append("─" * width)  # rule between rows
+        lines += join_row(r)
+    return "\n".join(l[:width] for l in lines[:height])
 
 
 def items():
@@ -40,7 +69,10 @@ def snapshot():
 def draw():
     # Build the whole frame first, then overwrite in place (home, clear each line's tail,
     # clear below) in one write: no blank-screen flash between frames.
-    frame = side_by_side([render(p) for p in items()])
+    w, h = shutil.get_terminal_size()
+    # w - 1: a line filling the last column leaves the cursor in a "pending wrap" state
+    # where the clear-to-end-of-line below would erase its final character.
+    frame = layout([cell(render(p)) for p in items()], w - 1, h)
     sys.stdout.write("\033[H" + frame.replace("\n", "\033[K\n") + "\033[K\033[J")
     sys.stdout.flush()
 
