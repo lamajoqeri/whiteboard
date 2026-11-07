@@ -8,8 +8,10 @@ tmux -L $S has-session -t $S 2>/dev/null && exec tmux -L $S attach -t $S
 mkdir -p "$PWD/.whiteboard"
 tmux -L $S new-session -d -s $S -c "$PWD" \
   "python3 '$DIR/board.py' --watch '$PWD/.whiteboard'"
-# WHITEBOARD_DIR tells agents in herdr where the board is (see hooks/session-start.sh)
-tmux -L $S split-window -v -l 65% -t $S -c "$PWD" -e "WHITEBOARD_DIR=$PWD/.whiteboard" herdr --session whiteboard
+# Attaches to the default herdr session. Its server may predate this launch, so agents can't
+# inherit WHITEBOARD_DIR; hooks/session-start.sh reads it from this tmux session instead.
+tmux -L $S set-environment -t $S WHITEBOARD_DIR "$PWD/.whiteboard"
+tmux -L $S split-window -v -l 65% -t $S -c "$PWD" herdr
 tmux -L $S set -t $S status off
 tmux -L $S set -t $S mouse on  # drag the divider to resize
 tmux -L $S set -t $S allow-passthrough on
