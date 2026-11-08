@@ -15,8 +15,11 @@ RESIZE_SETTLE = 0.2  # seconds without a resize signal before redrawing (tmux se
 
 def render(item):
     if item.suffix == ".mmd":
-        out = subprocess.run([HERE / "bin/mermaid-ascii", "-f", item, "-y", "2", "-p", "0"],
-                             capture_output=True, text=True).stdout
+        try:
+            out = subprocess.run([HERE / "bin/mermaid-ascii", "-f", item, "-y", "2", "-p", "0"],
+                                 capture_output=True, text=True).stdout
+        except OSError:  # bin/ is gitignored, so a fresh clone won't have it
+            return [f"{item.name}: mermaid-ascii not installed"]
         return [l.rstrip() for l in out.splitlines()]
     data = item.read_bytes()
     if b"\0" in data:  # NUL byte = binary (same heuristic git uses): label it instead of printing garbage

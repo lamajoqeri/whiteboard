@@ -48,6 +48,11 @@ with tempfile.TemporaryDirectory() as d:
     (d / ".01-bugs.md.swp").write_bytes(b"b0VIM\0junk")
     assert board.render(d / "chart.png") == ["chart.png: binary file (png)"]
     assert board.render(d / "notes.txt") == ["caf� ok"]
+    (d / "flow.mmd").write_text("graph TD\nA --> B\n")
+    real, board.HERE = board.HERE, d  # no bin/mermaid-ascii under d
+    assert board.render(d / "flow.mmd") == ["flow.mmd: mermaid-ascii not installed"]
+    board.HERE = real
+    (d / "flow.mmd").unlink()
     board.BOARD = d
     assert [p.name for p in board.items()] == ["chart.png", "notes.txt"]
 
