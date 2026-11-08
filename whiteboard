@@ -6,8 +6,8 @@ DIR=$(dirname "$(realpath "$0")")
 tmux -L $S has-session -t $S 2>/dev/null && exec tmux -L $S attach -t $S
 
 mkdir -p "$PWD/.whiteboard"
-tmux -L $S new-session -d -s $S -c "$PWD" \
-  "python3 '$DIR/board.py' --watch '$PWD/.whiteboard'"
+# Command as separate words: tmux runs it directly, no shell re-parsing quotes in the paths.
+tmux -L $S new-session -d -s $S -c "$PWD" python3 "$DIR/board.py" --watch "$PWD/.whiteboard"
 # Attaches to the default herdr session. Its server may predate this launch, so agents can't
 # inherit WHITEBOARD_DIR; hooks/session-start.sh reads it from this tmux session instead.
 tmux -L $S set-environment -t $S WHITEBOARD_DIR "$PWD/.whiteboard"
