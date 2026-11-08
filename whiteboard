@@ -1,18 +1,16 @@
 #!/bin/sh
-# whiteboard: board on top, herdr below, in a private tmux server
-S=whiteboard
+# whiteboard: board on top, herdr below, in a private tmux server, one session per project
 DIR=$(dirname "$(realpath "$0")")
+. "$DIR/project.sh"
 
-tmux -L $S has-session -t $S 2>/dev/null && exec tmux -L $S attach -t $S
+# "=": exact name match; tmux otherwise accepts any session whose name starts with this one.
+tmux -L whiteboard has-session -t "=$S" 2>/dev/null && exec tmux -L whiteboard attach -t "=$S"
 
-mkdir -p "$PWD/.whiteboard"
+mkdir -p "$ROOT/.whiteboard"
 # Command as separate words: tmux runs it directly, no shell re-parsing quotes in the paths.
-tmux -L $S new-session -d -s $S -c "$PWD" python3 "$DIR/board.py" --watch "$PWD/.whiteboard"
-# Attaches to the default herdr session. Its server may predate this launch, so agents can't
-# inherit WHITEBOARD_DIR; hooks/session-start.sh reads it from this tmux session instead.
-tmux -L $S set-environment -t $S WHITEBOARD_DIR "$PWD/.whiteboard"
-tmux -L $S split-window -v -l 65% -t $S -c "$PWD" herdr
-tmux -L $S set -t $S status off
-tmux -L $S set -t $S mouse on  # drag the divider to resize
-tmux -L $S set -t $S allow-passthrough on
-exec tmux -L $S attach -t $S
+tmux -L whiteboard new-session -d -s "$S" -c "$ROOT" python3 "$DIR/board.py" --watch "$ROOT/.whiteboard"
+tmux -L whiteboard split-window -v -l 65% -t "=$S:" -c "$ROOT" herdr  # the default herdr session
+tmux -L whiteboard set -t "=$S:" status off
+tmux -L whiteboard set -t "=$S:" mouse on  # drag the divider to resize
+tmux -L whiteboard set -t "=$S:" allow-passthrough on
+exec tmux -L whiteboard attach -t "=$S"

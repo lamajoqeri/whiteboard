@@ -1,12 +1,11 @@
 #!/bin/sh
-# Claude Code SessionStart hook: tell the agent about the whiteboard above it.
-# Silent unless a whiteboard is open: WHITEBOARD_DIR comes from the environment, or, for agents
-# inside herdr, from the running `whiteboard` tmux session (gone when the whiteboard is closed).
-if [ -z "${WHITEBOARD_DIR:-}" ] && [ "${HERDR_ENV:-}" = 1 ]; then
-  WHITEBOARD_DIR=$(tmux -L whiteboard show-environment -t whiteboard WHITEBOARD_DIR 2>/dev/null | cut -d= -f2-)
-fi
-[ -n "${WHITEBOARD_DIR:-}" ] && [ -d "$WHITEBOARD_DIR" ] || exit 0
+# Claude Code SessionStart hook: tell the agent about its project's whiteboard, if one is open.
+# A plain `herdr` and a whiteboard's bottom pane are the same herdr, so an agent can't tell how it
+# was started. What decides it is whether a whiteboard session is open for this agent's project.
 cat >/dev/null  # drain hook input
+. "$(dirname "$0")/../project.sh"
+tmux -L whiteboard has-session -t "=$S" 2>/dev/null || exit 0
+WHITEBOARD_DIR=$ROOT/.whiteboard
 
 cat <<EOF
 You are running inside **whiteboard**: the user sees a whiteboard pane above this chat, rendered live from $WHITEBOARD_DIR. It holds long-lived info the user will refer back to (bug lists, plans, decisions, diagrams). Short-lived discussion stays in chat.
