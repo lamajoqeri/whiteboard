@@ -18,7 +18,10 @@ def render(item):
         out = subprocess.run([HERE / "bin/mermaid-ascii", "-f", item, "-y", "2", "-p", "0"],
                              capture_output=True, text=True).stdout
         return [l.rstrip() for l in out.splitlines()]
-    return item.read_text().splitlines()
+    data = item.read_bytes()
+    if b"\0" in data:  # NUL byte = binary (same heuristic git uses): label it instead of printing garbage
+        return [f"{item.name}: binary file ({item.suffix[1:] or 'unknown type'})"]
+    return data.decode(errors="replace").splitlines()  # odd bytes become �, never a crash
 
 
 # ponytail: len() counts every char as 1 column; emoji/CJK are 2 and will overrun slightly
@@ -66,7 +69,8 @@ def clamp(offset, total, height):
 
 
 def items():
-    return sorted(p for p in BOARD.iterdir() if p.is_file())
+    # skip hidden files: editor swap files (.x.swp), .DS_Store and other dotfile clutter
+    return sorted(p for p in BOARD.iterdir() if p.is_file() and not p.name.startswith("."))
 
 
 def snapshot():

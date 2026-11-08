@@ -36,4 +36,19 @@ assert scroll_ticks("\033[<65;10;5M\033[<65;10;5M") == 2
 assert scroll_ticks("\033[<64;1;1M") == -1
 assert scroll_ticks("\033[<0;3;4M\033[<0;3;4m") == 0
 
+# file reading: binary gets a label, bad UTF-8 doesn't crash, hidden files are skipped
+import tempfile
+from pathlib import Path
+import board
+
+with tempfile.TemporaryDirectory() as d:
+    d = Path(d)
+    (d / "chart.png").write_bytes(b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR")
+    (d / "notes.txt").write_bytes(b"caf\xe9 ok")  # latin-1, invalid UTF-8
+    (d / ".01-bugs.md.swp").write_bytes(b"b0VIM\0junk")
+    assert board.render(d / "chart.png") == ["chart.png: binary file (png)"]
+    assert board.render(d / "notes.txt") == ["caf� ok"]
+    board.BOARD = d
+    assert [p.name for p in board.items()] == ["chart.png", "notes.txt"]
+
 print("ok")
