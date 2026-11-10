@@ -140,9 +140,13 @@ def watch():
                 # A drag fires many resizes; redraw once they've stopped.
                 settled = resized_at and time.monotonic() - resized_at > RESIZE_SETTLE
                 if now != last or settled:
+                    # Clear only a settled resize, and before building: one that arrives mid-build
+                    # or mid-drag stays pending and gets its own redraw at the new size.
+                    if settled:
+                        resized_at = 0.0
                     build()
                     show()
-                    last, resized_at = now, 0.0
+                    last = now
             except FileNotFoundError:  # file deleted mid-scan; next poll catches up
                 pass
     finally:  # always hand the terminal back: mouse reporting off, normal input mode
