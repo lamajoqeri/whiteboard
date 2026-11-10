@@ -51,6 +51,17 @@ with tempfile.TemporaryDirectory() as d:
     (d / "flow.mmd").write_text("graph TD\nA --> B\n")
     real, board.HERE = board.HERE, d  # no bin/mermaid-ascii under d
     assert board.render(d / "flow.mmd") == ["flow.mmd: mermaid-ascii not installed"]
+    # failing mermaid-ascii: its fatal message is shown, wrapped to 40 columns
+    (d / "bin").mkdir()
+    fake = d / "bin/mermaid-ascii"
+    fake.write_text("#!/bin/sh\necho 'level=fatal msg=\"unsupported graph type pie, use graph or "
+                    "flowchart with a direction\"' >&2\nexit 1\n")
+    fake.chmod(0o755)
+    out = board.render(d / "flow.mmd")
+    assert out[0] == "flow.mmd: mermaid error" and len(out) == 3, out
+    assert " ".join(out[1:]).startswith("unsupported graph type pie") and max(map(len, out)) <= 40, out
+    fake.unlink()
+    (d / "bin").rmdir()
     board.HERE = real
     (d / "flow.mmd").unlink()
     board.BOARD = d

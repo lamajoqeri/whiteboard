@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Render .whiteboard/ items in wrapping rows: text items as-is, .mmd via mermaid-ascii."""
-import os, select, shutil, signal, subprocess, sys, termios, time, tty
+import os, re, select, shutil, signal, subprocess, sys, termios, textwrap, time, tty
 from collections import namedtuple
 from pathlib import Path
 
@@ -16,11 +16,14 @@ RESIZE_SETTLE = 0.2  # seconds without a resize signal before redrawing (tmux se
 def render(item):
     if item.suffix == ".mmd":
         try:
-            out = subprocess.run([HERE / "bin/mermaid-ascii", "-f", item, "-y", "2", "-p", "0"],
-                                 capture_output=True, text=True).stdout
+            run = subprocess.run([HERE / "bin/mermaid-ascii", "-f", item, "-y", "2", "-p", "0"],
+                                 capture_output=True, text=True)
         except OSError:  # bin/ is gitignored, so a fresh clone won't have it
             return [f"{item.name}: mermaid-ascii not installed"]
-        return [l.rstrip() for l in out.splitlines()]
+        if run.returncode:  # bad syntax / unsupported diagram: say why instead of vanishing
+            why = re.search(r'msg="(.*)"', run.stderr)  # its log line: level=fatal msg="..."
+            return [f"{item.name}: mermaid error"] + textwrap.wrap(why[1] if why else run.stderr, 40)
+        return [l.rstrip() for l in run.stdout.splitlines()]
     data = item.read_bytes()
     if b"\0" in data:  # NUL byte = binary (same heuristic git uses): label it instead of printing garbage
         return [f"{item.name}: binary file ({item.suffix[1:] or 'unknown type'})"]
