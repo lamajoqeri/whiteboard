@@ -4,15 +4,18 @@
   whiteboard        open (or reattach to) this project's whiteboard
   whiteboard hook   Claude Code SessionStart hook: brief the agent if its project's board is open
 
-On Windows, psmux provides tmux (it installs a tmux.exe alias)."""
+On Windows the multiplexer is psmux, a native tmux port that takes the same commands."""
 import json, os, re, subprocess, sys, zlib
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent  # resolve(): the command is a symlink to this file
+# Call psmux by its own name: its tmux.exe alias can be shadowed, e.g. by Git Bash's MSYS tmux,
+# which can't host Windows programs like herdr.exe.
+MUX = "psmux" if os.name == "nt" else "tmux"
 
 
 def tmux(*args, **kw):
-    return subprocess.run(["tmux", "-L", "whiteboard", *map(str, args)], **kw)
+    return subprocess.run([MUX, "-L", "whiteboard", *map(str, args)], **kw)
 
 
 def project_root(cwd):
@@ -35,7 +38,7 @@ def session(root):
 def is_open(name):
     try:  # "=": exact name match; tmux otherwise accepts any session whose name starts with this one
         return tmux("has-session", "-t", f"={name}", capture_output=True).returncode == 0
-    except OSError:  # no tmux installed
+    except OSError:  # no tmux/psmux installed
         return False
 
 
@@ -49,16 +52,17 @@ def launch():
         tmux("new-session", "-d", "-s", s, "-c", root, "--", sys.executable, HERE / "board.py", "--watch", board)
         tmux("set", "-t", pane, "status", "off")
         tmux("set", "-t", pane, "mouse", "on")  # drag the divider to resize
-        tmux("set", "-t", pane, "allow-passthrough", "on")
+        if MUX == "tmux":  # psmux doesn't forward passthrough yet
+            tmux("set", "-t", pane, "allow-passthrough", "on")
     # Add herdr below the board: on a new session, and again if its pane closed (its server stopped,
     # e.g. for a herdr update), otherwise reattaching shows the board alone. Default herdr session.
     running = tmux("list-panes", "-t", pane, "-F", "#{pane_current_command}", capture_output=True, text=True)
     if "herdr" not in [c.removesuffix(".exe") for c in running.stdout.splitlines()]:  # psmux: herdr.exe
         tmux("split-window", "-v", "-l", "65%", "-t", pane, "-c", root, "--", "herdr")
-    attach = ["tmux", "-L", "whiteboard", "attach", "-t", f"={s}"]
+    attach = [MUX, "-L", "whiteboard", "attach", "-t", f"={s}"]
     if os.name == "nt":  # no exec on Windows: run tmux and pass on its exit code
         sys.exit(subprocess.run(attach).returncode)
-    os.execvp("tmux", attach)  # become tmux, so the terminal talks to it directly
+    os.execvp(MUX, attach)  # become tmux, so the terminal talks to it directly
 
 
 def briefing(cwd):
