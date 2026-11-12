@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Render .whiteboard/ items in wrapping rows: text items as-is, .mmd via mermaid-ascii."""
-import os, re, select, shutil, signal, subprocess, sys, termios, textwrap, time, tty
+import os, re, shutil, signal, subprocess, sys, textwrap, time
 from collections import namedtuple
 from pathlib import Path
 
@@ -10,7 +10,50 @@ BOARD = Path(ARGS[0]) if ARGS else HERE / ".whiteboard"
 GAP = "   │   "
 SCROLL_STEP = 3  # lines per mouse wheel tick
 MOUSE_ON, MOUSE_OFF = "\033[?1000h\033[?1006h", "\033[?1000l\033[?1006l"  # button events, SGR encoding
-RESIZE_SETTLE = 0.2  # seconds without a resize signal before redrawing (tmux sends them ~250ms apart mid-drag)
+RESIZE_SETTLE = 0.2  # seconds without a size change before redrawing (tmux resizes ~250ms apart mid-drag)
+
+# Terminal input, the only part that differs per OS: raw_mode() switches to reading input as it
+# arrives without echoing it and returns a function that switches back; wait_input(t) waits up to
+# t seconds and returns whatever arrived ("" if nothing).
+if os.name == "nt":
+    import ctypes, msvcrt
+    k32 = ctypes.windll.kernel32
+
+    def raw_mode():
+        inp, out = k32.GetStdHandle(-10), k32.GetStdHandle(-11)  # console input, output
+        imode, omode = ctypes.c_uint32(), ctypes.c_uint32()
+        k32.GetConsoleMode(inp, ctypes.byref(imode))
+        k32.GetConsoleMode(out, ctypes.byref(omode))
+        # input: line buffering (0x2) and echo (0x4) off; VT input (0x200) on, so the mouse wheel
+        # arrives as ESC[<65;... text like on macOS instead of Windows mouse event records
+        k32.SetConsoleMode(inp, (imode.value & ~0x6) | 0x200)
+        k32.SetConsoleMode(out, omode.value | 0x4)  # output: understand the ESC codes show() writes
+        return lambda: (k32.SetConsoleMode(inp, imode.value), k32.SetConsoleMode(out, omode.value))
+
+    def wait_input(timeout):
+        # Polls kbhit() rather than waiting on the console handle: that also wakes for focus and
+        # key-up events, which carry no text, and reading after it would block.
+        end = time.monotonic() + timeout
+        while not msvcrt.kbhit():
+            if time.monotonic() >= end:
+                return ""
+            time.sleep(0.01)
+        chars = []
+        while msvcrt.kbhit():
+            chars.append(msvcrt.getwch())
+        return "".join(chars)
+else:
+    import select, termios, tty
+
+    def raw_mode():
+        fd = sys.stdin.fileno()
+        saved = termios.tcgetattr(fd)
+        tty.setcbreak(fd)
+        return lambda: termios.tcsetattr(fd, termios.TCSADRAIN, saved)
+
+    def wait_input(timeout):
+        fd = sys.stdin.fileno()
+        return os.read(fd, 1024).decode(errors="ignore") if select.select([fd], [], [], timeout)[0] else ""
 
 
 def render(item):
@@ -119,30 +162,22 @@ def scroll_ticks(data):
     return data.count("\033[<65;") - data.count("\033[<64;")
 
 
-resized_at = 0.0  # when the last resize signal arrived; 0 = none pending
-
-
-def on_resize(*_):
-    global resized_at
-    resized_at = time.monotonic()
-
-
 def watch():
-    global offset, resized_at
-    signal.signal(signal.SIGWINCH, on_resize)  # terminal/pane resized, incl. divider drags
-    fd = sys.stdin.fileno()
-    saved = termios.tcgetattr(fd)
-    tty.setcbreak(fd)  # read input as it arrives, without echoing it
+    global offset
+    restore = raw_mode()
     sys.stdout.write(MOUSE_ON)  # ask for wheel events; tmux then forwards them instead of entering copy mode
     try:
         # ponytail: polls mtimes every 0.1s; use fswatch/kqueue if the board grows to many files
-        last = None
+        last, size, resized_at = None, shutil.get_terminal_size(), 0.0  # resized_at 0 = none pending
         while True:
-            if select.select([fd], [], [], 0.1)[0]:  # wait up to 0.1s for mouse input
-                ticks = scroll_ticks(os.read(fd, 1024).decode(errors="ignore"))
-                if ticks:
-                    offset += ticks * SCROLL_STEP
-                    show()
+            ticks = scroll_ticks(wait_input(0.1))  # wait up to 0.1s for mouse input
+            if ticks:
+                offset += ticks * SCROLL_STEP
+                show()
+            # Resizes, incl. divider drags: Windows has no SIGWINCH, so on both systems compare the
+            # size each pass (at most 0.1s apart).
+            if shutil.get_terminal_size() != size:
+                size, resized_at = shutil.get_terminal_size(), time.monotonic()
             try:
                 now = snapshot()
                 # A drag fires many resizes; redraw once they've stopped.
@@ -160,7 +195,7 @@ def watch():
     finally:  # always hand the terminal back: mouse reporting off, normal input mode
         sys.stdout.write(MOUSE_OFF)
         sys.stdout.flush()
-        termios.tcsetattr(fd, termios.TCSADRAIN, saved)
+        restore()
 
 
 if __name__ == "__main__":
@@ -168,8 +203,9 @@ if __name__ == "__main__":
         build()
         show()
         sys.exit()
-    for sig in (signal.SIGTERM, signal.SIGHUP):  # pane killed/closed: exit via finally, not abruptly
-        signal.signal(sig, lambda *_: sys.exit())
+    for sig in ("SIGTERM", "SIGHUP"):  # pane killed/closed: exit via finally, not abruptly
+        if hasattr(signal, sig):  # Windows has no SIGHUP
+            signal.signal(getattr(signal, sig), lambda *_: sys.exit())
     try:
         watch()
     except KeyboardInterrupt:
