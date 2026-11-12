@@ -30,6 +30,13 @@ def render(item):
     return data.decode(errors="replace").splitlines()  # odd bytes become �, never a crash
 
 
+def clean(line):
+    """Make a line safe to print: tabs become spaces (len() counts a tab as 1 column, the terminal
+    up to 8), and control chars like ESC become � so they show as text instead of recoloring,
+    clearing or moving the cursor."""
+    return re.sub(r"[\x00-\x1f\x7f-\x9f]", "�", line.expandtabs(4))
+
+
 # ponytail: len() counts every char as 1 column; emoji/CJK are 2 and will overrun slightly
 Cell = namedtuple("Cell", "lines width height")
 
@@ -92,7 +99,8 @@ def build():
     global lines
     # w - 1: a line filling the last column leaves the cursor in a "pending wrap" state
     # where the clear-to-end-of-line in show() would erase its final character.
-    lines = layout([cell(render(p)) for p in items()], shutil.get_terminal_size().columns - 1)
+    cells = [cell([clean(l) for l in render(p)]) for p in items()]
+    lines = layout(cells, shutil.get_terminal_size().columns - 1)
 
 
 def show():

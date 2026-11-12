@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Checks for board layout and scrolling. Run: python3 test_board.py"""
-from board import GAP, cell, clamp, layout, scroll_ticks
+from board import GAP, cell, clamp, clean, layout, scroll_ticks
 
 box = lambda w, h: cell(["x" * w] * h)
 
@@ -35,6 +35,12 @@ assert clamp(3, 5, 10) == 0  # board shorter than the pane: never scrolls
 assert scroll_ticks("\033[<65;10;5M\033[<65;10;5M") == 2
 assert scroll_ticks("\033[<64;1;1M") == -1
 assert scroll_ticks("\033[<0;3;4M\033[<0;3;4m") == 0
+
+# control chars: tabs expand to spaces, ESC and friends become visible �
+assert clean("a\tb") == "a   b"
+assert clean("\033[31mred\033[0m") == "�[31mred�[0m"
+assert clean("bell\x07 del\x7f c1\x9b ok") == "bell� del� c1� ok"
+assert clean("plain │ ─ é") == "plain │ ─ é"
 
 # file reading: binary gets a label, bad UTF-8 doesn't crash, hidden files are skipped
 import tempfile
