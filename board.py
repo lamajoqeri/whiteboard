@@ -5,6 +5,7 @@ from collections import namedtuple
 from pathlib import Path
 
 HERE = Path(__file__).parent
+MERMAID = HERE / "bin" / ("mermaid-ascii.exe" if os.name == "nt" else "mermaid-ascii")  # Windows build is .exe
 ARGS = [a for a in sys.argv[1:] if a != "--watch"]
 BOARD = Path(ARGS[0]) if ARGS else HERE / ".whiteboard"
 GAP = "   │   "
@@ -59,7 +60,7 @@ else:
 def render(item):
     if item.suffix == ".mmd":
         try:
-            run = subprocess.run([HERE / "bin/mermaid-ascii", "-f", item, "-y", "2", "-p", "0"],
+            run = subprocess.run([MERMAID, "-f", item, "-y", "2", "-p", "0"],
                                  capture_output=True, text=True)
         except OSError:  # bin/ is gitignored, so a fresh clone won't have it
             return [f"{item.name}: mermaid-ascii not installed"]

@@ -55,7 +55,7 @@ with tempfile.TemporaryDirectory() as d:
     assert board.render(d / "chart.png") == ["chart.png: binary file (png)"]
     assert board.render(d / "notes.txt") == ["caf� ok"]
     (d / "flow.mmd").write_text("graph TD\nA --> B\n")
-    real, board.HERE = board.HERE, d  # no bin/mermaid-ascii under d
+    real, board.MERMAID = board.MERMAID, d / "bin/mermaid-ascii"  # nothing there yet
     assert board.render(d / "flow.mmd") == ["flow.mmd: mermaid-ascii not installed"]
     # failing mermaid-ascii: its fatal message is shown, wrapped to 40 columns
     (d / "bin").mkdir()
@@ -68,7 +68,7 @@ with tempfile.TemporaryDirectory() as d:
     assert " ".join(out[1:]).startswith("unsupported graph type pie") and max(map(len, out)) <= 40, out
     fake.unlink()
     (d / "bin").rmdir()
-    board.HERE = real
+    board.MERMAID = real
     (d / "flow.mmd").unlink()
     board.BOARD = d
     assert [p.name for p in board.items()] == ["chart.png", "notes.txt"]
