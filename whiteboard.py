@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""whiteboard: board on top, herdr below, in a private tmux server, one session per project.
+"""whiteboard: board on top, herdr below, in a private tmux server. Each project gets its own
+tmux session and its own herdr session, both under the same name.
 
-  whiteboard        open (or reattach to) this project's whiteboard
-  whiteboard hook   Claude Code SessionStart hook: brief the agent if its project's board is open
+  whiteboard          open (or reattach to) this project's whiteboard
+  whiteboard hook     Claude Code SessionStart hook: brief the agent if its project's board is open
+  whiteboard session  print this project's session name, e.g. for `herdr --session`
 
 On Windows the multiplexer is psmux, a native tmux port that takes the same commands."""
 import json, os, re, subprocess, sys, zlib
@@ -32,7 +34,9 @@ def project_root(cwd):
 
 def session(root):
     # tmux names can't contain . or :, and the hash keeps two folders both called "api" apart.
-    return f"wb-{re.sub(r'[^A-Za-z0-9_-]', '_', root.name)}-{zlib.crc32(str(root).encode())}"
+    # ponytail: [:20] keeps herdr's socket path (<config>/sessions/<name>/herdr-client.sock) under
+    # the OS limit (~104 bytes), past which its server never starts; a very long home path still overflows.
+    return f"wb-{re.sub(r'[^A-Za-z0-9_-]', '_', root.name)[:20]}-{zlib.crc32(str(root).encode())}"
 
 
 def is_open(name):
@@ -55,10 +59,11 @@ def launch():
         if MUX == "tmux":  # psmux doesn't forward passthrough yet
             tmux("set", "-t", pane, "allow-passthrough", "on")
     # Add herdr below the board: on a new session, and again if its pane closed (its server stopped,
-    # e.g. for a herdr update), otherwise reattaching shows the board alone. Default herdr session.
+    # e.g. for a herdr update), otherwise reattaching shows the board alone. A named herdr session
+    # per project: the default one is shared, so every project would show the same herdr.
     running = tmux("list-panes", "-t", pane, "-F", "#{pane_current_command}", capture_output=True, text=True)
     if "herdr" not in [c.removesuffix(".exe") for c in running.stdout.splitlines()]:  # psmux: herdr.exe
-        tmux("split-window", "-v", "-l", "65%", "-t", pane, "-c", root, "--", "herdr")
+        tmux("split-window", "-v", "-l", "65%", "-t", pane, "-c", root, "--", "herdr", "--session", s)
     attach = [MUX, "-L", "whiteboard", "attach", "-t", f"={s}"]
     if os.name == "nt":  # no exec on Windows: run tmux and pass on its exit code
         sys.exit(subprocess.run(attach).returncode)
@@ -67,8 +72,8 @@ def launch():
 
 def briefing(cwd):
     """What the hook tells an agent working in cwd: nothing unless its project's whiteboard is open.
-    A plain `herdr` and a whiteboard's bottom pane are the same herdr, so how the agent was started
-    can't tell them apart; whether a whiteboard session is open for its project does."""
+    The project's herdr session can be attached without the board too (`herdr --session <name>`), so
+    how the agent was started can't tell if a board is showing; whether its whiteboard session is open does."""
     root = project_root(cwd)
     if not is_open(session(root)):
         return ""
@@ -94,4 +99,9 @@ def hook():
 
 
 if __name__ == "__main__":
-    hook() if sys.argv[1:] == ["hook"] else launch()
+    if sys.argv[1:] == ["hook"]:
+        hook()
+    elif sys.argv[1:] == ["session"]:
+        print(session(project_root(os.getcwd())))
+    else:
+        launch()

@@ -19,6 +19,8 @@ with tempfile.TemporaryDirectory() as t:
     assert wb.project_root(t / "plain") == t / "plain", "no git: the folder itself"
     assert wb.session(t / "b/api") != a, "same-named folders get different sessions"
     assert not set(".:") & set(wb.session(t / "my.app:x")), "no . or : in session names"
+    assert len(wb.session(t / ("x" * 80))) <= 34, "long folder names are cut: herdr's socket path limit"
+    assert wb.session(t / ("x" * 80)) != wb.session(t / ("x" * 81)), "cut names still differ by hash"
 
     wb.is_open = lambda name: name == a  # only project a's whiteboard is open
     text = wb.briefing(t / "a/api/src")

@@ -42,7 +42,11 @@ If you already have SessionStart hooks, add this one to that list.
 
 ## Use
 - `cd` into a project and run `whiteboard`: the board is on top, herdr below. Run it again to reattach.
+- Each project has its own herdr session, named like its whiteboard (`whiteboard session` prints the name).
+  To make a bare `herdr` open the current project's session too, add to `~/.zshrc` or `~/.bashrc`:
+  `herdr() { [ $# -eq 0 ] && set -- --session "$(whiteboard session)"; command herdr "$@"; }`
 - Board items live in the project's `.whiteboard/` folder, one file per item.
 - See open whiteboards: `tmux -L whiteboard ls`. Close one: `tmux -L whiteboard kill-session -t <name>`
-  (`psmux` instead of `tmux` on Windows).
+  (`psmux` instead of `tmux` on Windows). Its herdr keeps running, agents included, until
+  `herdr session stop <name>`.
 - Tests: `python3 test_board.py` and `python3 test_whiteboard.py`.
