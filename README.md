@@ -45,6 +45,8 @@ If you already have SessionStart hooks, add this one to that list.
 - Each project has its own herdr session, named like its whiteboard (`whiteboard session` prints the name).
   To make a bare `herdr` open the current project's session too, add to `~/.zshrc` or `~/.bashrc`:
   `herdr() { [ $# -eq 0 ] && set -- --session "$(whiteboard session)"; command herdr "$@"; }`
+  PowerShell (not yet tested), in the file `$PROFILE` names:
+  `function herdr { if ($args.Count) { herdr.exe @args } else { herdr.exe --session (whiteboard session) } }`
 - Board items live in the project's `.whiteboard/` folder, one file per item.
 - See open whiteboards: `tmux -L whiteboard ls`. Close one: `tmux -L whiteboard kill-session -t <name>`
   (`psmux` instead of `tmux` on Windows). Its herdr keeps running, agents included, until
