@@ -61,7 +61,7 @@ def render(item):
     if item.suffix == ".mmd":
         try:
             run = subprocess.run([MERMAID, "-f", item, "-y", "2", "-p", "0"],
-                                 capture_output=True, text=True)
+                                 capture_output=True, text=True, encoding="utf-8", errors="replace")
         except OSError:  # bin/ is gitignored, so a fresh clone won't have it
             return [f"{item.name}: mermaid-ascii not installed"]
         if run.returncode:  # bad syntax / unsupported diagram: say why instead of vanishing
